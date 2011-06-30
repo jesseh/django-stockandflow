@@ -1,0 +1,71 @@
+TODO:
+
+Add the timestamp fields for Assignments
+
+Notes:
+
+
+== Facets
+ - "A facet comprises "clearly defined, mutually exclusive, and collectively exhaustive aspects, properties or characteristics of a class or specific subject".[1] For example, a collection of books might be classified using an author facet, a subject facet, a date facet, etc." (http://en.wikipedia.org/wiki/Faceted_classification)
+ - Facets are instances of the facets class
+ - They are registered with the Stock so that they process can then make them available in the view.
+ - A facet can either be defined with a choice or with a queryset to create the lookup (in other words, the facet might be by username).
+
+ - The simplest way to represent this is by using list filters in the stocks. But, the fact that we are using generic foreign keys is going to make filtering the events difficult. The generic foreign key creates a lot of problems here. It would be simpler if there were an flowEvent table for each type of flow event object. This would be an event for User, Assignment, Email, And maybe a few other things. I could also create a single table with nullable foreign keys to all of these tables. It would waiste some space, but that's not a big deal.
+ 
+ I wonder if I could use a proxy model to solve to make django deal more happily with the generic foreign keys. That would be the best approach because I wouldn't have to change the database structure to add new content types. Nope :(
+
+Maybe there needs to be a 
+ - class ObjectFlowEvent(FlowEvent)
+ - then registering the Model it requires a flowevent table
+
+
+== Side effects
+ - Actions that are taken at various points in the stock and flow mechanism. They are effectively callback functions, but are registered so that they can be reported in the view.
+ - registered so that they can be displayed in the view (name and description)
+ - class based for extensiblity.
+ - Applied either before the count is recorded or after, or before a flow event or after it.
+ - Each has an exec function.
+   - A stock side effect takes a query set and may modify the elements that are part of the stock.
+   - A flow side effect's exec function takes an object.
+ - For example a decay side effect would change the status of members of the stock that are older than a given period.
+
+
+ -----
+
+ Things to represent:
+
+  - Partner usage
+    - How many referrals have we received?
+    - How active are they?
+       => Facets on the prospecting process and the coaching process
+
+ - Prospect decay to loss
+  - How many arrive, who goes through and who faids out.
+
+ - Assignment flow
+   - How many assignments have we made and what is the rate at which people are doing them
+     - Facets: subject, user dimensions.
+
+ - Mailing list autoresponders
+   - A series of stocks with a decay side effect to create the flow between them. The decay side effect sends the next email, which changes the state that creates the flow.
+
+ - Coaching engagment
+   - The states that members may be in: have assignment, did work, out of activities, finished an activity, form needs response. unanswered help request, regularly engaged, less engaged, unengaged, cancelled, new, recently messaged, skills studied (a tree of stocks that depict the curriculum).
+   - Some of these transitions are automatic, others require intervention.
+
+ - Adoption funnel
+   - A series of stocks representing the sequence of the funnel, plus extra stocks for won and lost. Add a side effet to notify the team when a person needs to be contacted. Use a decay function to flow people into the lost stock.
+
+ - Page views
+   - Get a sense of the coverage of our site.
+   - Create a stock for each page (action, other page?), these could be grouped into subjects using processes
+   - There are no flows for these stocks:b 
+   - There should be a per-user facet.
+   - This could be applicable internally and externally
+
+
+=====
+Process:
+for a given time period
+ - Stock: Current (inflows, count, outflows) || inflows (history) | count (history) | outflows (history)

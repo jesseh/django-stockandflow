@@ -1,0 +1,252 @@
+Metadata-Version: 1.0
+Name: django-stockandflow
+Version: 0.0.1
+Summary: Django stock and flow tracking for business intelligence metrics
+Home-page: http://github.com/jesseh/django-stockandflow/
+Author: Jesse Heitler
+Author-email: jesseh@i-iterate.com
+License: LICENSE.txt
+Description: ==================
+        django-stockandflow
+        ==================
+        
+        Django stock and flow tracking for business intelligence
+        
+        Installation
+        ============
+        
+        1. Install from PyPI with ``pip``::
+        
+        pip install django-stockandflow
+        
+        .. _in-development version: https://github.com/jesseh/django-stockandflow.git
+        
+        2. Add ``stockandflow`` to ``INSTALLED_APPS`` setting.
+        
+        3. Create a cron job to call ``./manage.py run_periodic_schedule`` at an
+        interval that is at least as frequent as your most frequent period that you
+        register with the periodic scheduler. Hourly, or perhaps every 10 minutes,
+        is likely to be sufficient.
+        
+        4. Start creating stocks and flows.
+        
+        Dependencies
+        ------------
+        
+        - ``Django >= 1.2`` (not yet tested with 1.3)
+        
+        .. _Django: http://www.djangoproject.com/
+        
+        Introduction
+        ============
+        
+        Django Stock and Flow is a business intelligence tool. The goal is to transform
+        the raw data in a Django application into views that answer business questions.
+        Just as the Django Admin interface makes it easy to manage data in your
+        project, Django Stock and Flow makes it easy to define, track and present
+        business metrics for your project.
+        
+        The theory behind Django Stock and Flow is based on `system dynamics`_. There
+        is more information on the concept of stocks and flows on wikipedia_.
+        
+        In addition to tracking metrics, Django Stock and Flow has hooks for running
+        automation code when flow events occur and when the stocks are counted. These
+        hooks are useful, for example, to create decaying stocks. The system can
+        automatically transition an object through a set of states, like 'hot', 'warm'
+        and 'cold' over time.
+        
+        **This app is very much in development.** The api is likely to change in ways
+        that are not backwards compatible.
+        
+        .. _`system dynamics`: http://en.wikipedia.org/wiki/System_dynamics
+        .. _wikipedia: http://en.wikipedia.org/wiki/Stock_and_flow
+        
+        Key Concepts
+        ============
+        
+        Stock
+        -----
+        An accumulation defined by a queryset.
+        
+        In the abstract a stock is a collection that is counted at a specific time
+        interval, generating a StockRecord). The state of an object defines it's
+        membership in a given stock. As a result, the words state and stock are roughly
+        interchangeable.
+        
+        In the specific a stock is a subset of records for a given model that meet the
+        conditions defined in the queryset.
+        
+        For example a User may have an "active" stock and an "inactive" stock defined
+        by whether or not each user.is_active == True.
+        
+        There is no model associated with a stock.
+        
+        Facets is a list of either facet objects or tuples of the form (facet,
+        field_prefix). The field prefix maps the object of the stock to the object that
+        is filtered in the facet. For example, if there is a User with a Profile and a
+        facet on the Profile object like "yada"="true" then a User stock would use the
+        field_prefix "profile" so that the field lookup in the facet becomes
+        "profile__yada"=True.
+        
+        
+        Flow
+        ----
+        A named relationship between stocks representing the transition of an object
+        from a source stock to a sink stock. A flow enables the transitions to measured
+        over an interval of time to track the rate of occurence.
+        
+        A flow may have any number of source or sinks stocks. None is a valid source or
+        sink that represents an external, or untracked stock. Any other class, such as
+        an int or a string can be used a stock stand-in for creating flow events
+        between states that do not have an associated Stock instance.
+        
+        Continuing the example in the Stock docstring, when a new user is created the
+        flow from None to the stock "active". A flow to track this tranisition could be
+        called "activating".  The activating flow would also have "inactive" as a
+        source to handle the case where a previously inactive user becomes active
+        again.
+        
+        The optional event_callables list is called whenever an flow event is created
+        for this flow. It receives the flowed_obj, source and sink. An example use
+        would be to send an email each time an activating flow occurs.
+        
+        
+        Facet
+        -----
+        A facet is used to split a stock or flow into sub-queries. For example, one
+        could track users, and then add a facet based on is_active to track how many
+        are active vs. inactive.
+        
+        - The name is used to refer to the facet.
+        - The field lookup is the same as the left side of a kwarg in a filter
+        function.
+        - Values can either be a list or a ValuesQuerySet with flat=True. If it is a
+        ValuesQuerySet then it will be re-evaluated at every use.
+        
+        
+        Flow Event
+        ----------
+        An abstract base class for the timestamped event of an object moving from one
+        stock to another.
+        
+        Each type of object that flows needs to have an subclass of the FlowEvent model
+        to capture events on objects of that class. This approach avoids using a
+        generic foreign key and the limitations that come with it.
+        
+        Flow events combine to create a  flow variable that is measured over an
+        interval of time. Therefore a flow would be measured per unit of time (say a
+        year).
+        
+        Subclasses must have a "subject" foreign key field.
+        
+        
+        Stock Record and Stock Facet Record
+        ------------
+        A record of the count of a given stock and its facets at a point in time. There
+        is one model to capture the stock records for all the stocks.
+        
+        
+        Flow Record and Flow Facet Record
+        ------------
+        *To be implemnted*
+        
+        A record of the time-framed count of flow events for a given flow and its
+        facets. There is one model to capture the flow event records for all the flows.
+        
+        
+        Model Tracker
+        -------------
+        A common use case is to generate flow events when data in a given model
+        changes. This class does the heavy lifting to make that happen.
+        
+        It generates flow events by monitoring for changes to the fields_to_track
+        list, runs the old and new field values through the states_to_stocks_func
+        function to figure out the source and sink stocks. Then it tries to checks
+        if any of the flows will make an event for that transition.
+        
+        The states_to_stocks_func receives two tuples of field values in the order that
+        they are declared in fields_to_track. The first tuple lists the previous value of the
+        fields and the second tuple lists the current value of the fields. The function must
+        return a pair of tuples of stocks (they can be a 1-tuple). This allows a single model's
+        state be composed of any number of sub-states/stocks. The resulting previous
+        and current state tuples are then compared element by element.
+        
+        Thanks to carljm for the monitor in django-model-utils on which the
+        change tracking is based.
+        
+        
+        Periodic Scheduler
+        ------------------
+        Periodically call a set of registered callable functions.
+        
+        This can be used, for example, to periodically count a stock and generate stock
+        records. It could also be used to periodically decay objects from one stock to
+        another.
+        
+        The periodic scheduler requires that a cron job call the management command
+        ``run_periodic_schedule`` at regular intervals. The system sorts out which
+        registered function to run at each invocation.
+        
+        
+        Process
+        -------
+        
+        A view helper class to group stocks for use in a view. Any set of stocks, flows
+        and associated facets can be added to a Process. Passing the Process object to
+        a template is an easy way to provide all of the data required for a given set
+        of metrics.
+        
+        *The Process class is only a skeleton implementation. In the future it should
+        include helpers and possibly templates to rapdily report on stocks and flows.*
+        
+        
+        Stock and Flow Admin
+        --------------------
+        This leverages Django's fantastic built-in admin to offer great functionality
+        for both stocks and flows. Via this interface the stocks and flows can be
+        viewed and actions applied.
+        
+        The StockAndFlowAdminSite registers a proxy model for each stock and flow to
+        get around the fact that the admin site does not like a given model to be
+        registered more than once.
+        
+        This stock and flow admin is meant to be registered as a seperate admin site so
+        that it does not clutter up the normal admin with dynamically created stock and
+        flow entries.
+        
+        
+        Usage
+        =====
+        See the ``example`` folder. This code is meant to be an example. **It will not
+        execute.**
+        
+        
+        For Help
+        ========
+        Django Stock and Flow is very much in development and the documentation could
+        use some work.  If you want help implementing this please contact me at
+        jesseh@i-iterate.com.
+        
+        CHANGES
+        =======
+        
+        tip (unreleased)
+        ----------------
+        
+        0.1.0 (2011.06.30)
+        ------------------
+        - Initial release
+        TODO
+        ====
+        
+        - Create FlowRecords.
+        - Enhance views to generate generic stock and flow reports for a process.
+        - Test with Django 1.3.
+        
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Framework :: Django
