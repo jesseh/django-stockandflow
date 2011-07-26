@@ -53,16 +53,16 @@ class StockTest(TestCase):
         self.assertTrue(self.mock_qs.count.called)
 
     @patch.object(StockRecord, 'save')
-    def testSaveCountShouldCreatesStockRecord(self, mock_save):
+    def testSaveCountShouldCreateStockRecord(self, mock_save):
         s = Stock(*self.stock_args)
         s.save_count()
         self.assertTrue(mock_save.called)
 
     @patch.object(StockFacetRecord, 'save')
-    def testSaveCountShouldCreatesStockFacetRecord(self, mock_save):
+    def testSaveCountShouldCreateStockFacetRecord(self, mock_save):
         from stockandflow.models import Facet
         f = Facet("test_slug", "test name", "test_field", [1,2])
-        s = Stock(*self.stock_args)
+        s = Stock("test stock name", "test_stock_slug", self.mock_qs, facets=[f])
         s.facets = [f]
         s.save_count()
         self.assertEqual(mock_save.call_count, 2)
@@ -72,8 +72,8 @@ class StockTest(TestCase):
         from stockandflow.models import Facet
         f = Facet("test_slug", "test name", "test_field", [1,2])
         f.to_count = MagicMock()
-        s = Stock(*self.stock_args)
-        s.facets = [(f, "test_prefix")]
+        s = Stock("test stock name", "test_stock_slug", self.mock_qs,
+                  facets=[(f, "test_prefix")])
         s.save_count()
         self.assertEqual(f.to_count.call_args, (("test_prefix",), {}))
 
@@ -110,6 +110,20 @@ class StockTest(TestCase):
         self.assertEqual(rv[self.outflows[0]], self.outflows[0].all.return_value)
         self.assertTrue(self.outflows[1].all.called)
         self.assertEqual(rv[self.outflows[1]], self.outflows[1].all.return_value)
+
+    def testunitFacetedQSShouldReturnAQuerysetFilteredByAFacetBasedOnASlug(self):
+        from stockandflow.models import Facet
+        f = Facet("test_slug", "test name", "test_field", [1,2])
+        s = Stock("test stock name", "test_stock_slug", self.mock_qs, facets=[f])
+        s.faceted_qs("test_slug", value=1)
+        self.assertEqual(str(self.mock_qs.filter.call_args[0][0]), "(AND: ('test_field', 1))")
+
+    def testunitGetFacetedShouldReturnAFacetBasedOnASlug(self):
+        from stockandflow.models import Facet
+        f = Facet("test_slug", "test name", "test_field", [1,2])
+        s = Stock("test stock name", "test_stock_slug", self.mock_qs, facets=[f])
+        rv = s.get_facet("test_slug")
+        self.assertEqual(rv, f)
 
 
 class FlowTest(TestCase):
@@ -561,17 +575,38 @@ class FacetShould(TestCase):
         self.assertEqual(rv[0], 2)
         self.assertEqual(str(rv[1]), "(AND: ('yada__test_field', 2))")
 
+
+class StockFacetQuerysetShould(TestCase):
+    def testunitFindTheFacetGivenAFacetSlug(self):
+        from stockandflow.models import Facet, StockFacetQuerySet
+        f = Facet("test_slug", "test name", "test_field", [1,2])
+        s = Stock("test stock name", "test_stock_slug", Mock(), facets=[f])
+        sfq = StockFacetQuerySet(stock=s, facet_slug=f.slug, facet_value=1)
+        self.assertEqual(sfq.facet, f)
+
+    def testunitBeTheStockQuerysetIfThereIsNoFacet(self):
+        from stockandflow.models import StockFacetQuerySet, StockRecord
+        s = Stock("test stock name", "test_stock_slug", StockRecord.objects.all())
+        sfq = StockFacetQuerySet(stock=s)
+        self.assertEqual(sfq.query, s.queryset.query)
+
+    def testunitApplyTheFacetAndValueToTheQueryset(self):
+        from stockandflow.models import Facet, StockFacetQuerySet
+        mock_qs = Mock()
+        f = Facet("test_slug", "test name", "test_field", [1,2])
+        s = Stock("test stock name", "test_stock_slug", mock_qs, facets=[f])
+        sfq = StockFacetQuerySet(stock=s, facet_slug=f.slug, facet_value=1)
+        self.assertEqual(str(mock_qs.filter.call_args[0][0]), "(AND: ('test_field', 1))")
+
+
 class ProcessShould(TestCase):
     def testGenerateAListOfFacetsSortedBySlugBasedOnTheStocks(self):
         from stockandflow.models import Stock, Facet
         from stockandflow.views import Process
-        f1 = Facet("test_slug", "test name", "test_field", [1,2])
-        f2 = Facet("test_slug", "test name", "test_field", [1,2])
-        self.stock_args = []
-        s1 = Stock('test name 1', 'test_slug_1', Mock())
-        s2 = Stock('test name 2', 'test_slug_2', Mock())
-        s1.facets = [f1]
-        s2.facets = [f1, f2]
+        f1 = Facet("test_slug1", "test name1", "test_field", [1,2])
+        f2 = Facet("test_slug2", "test name2", "test_field", [1,2])
+        s1 = Stock('test name 1', 'test_slug_1', Mock(), [f1])
+        s2 = Stock('test name 2', 'test_slug_2', Mock(), [f1, f2])
         process = Process("process_test", "process test", [s1, s2])
         self.assertEqual(process.facets, [f1, f2])
 

@@ -1,6 +1,5 @@
-import re
-
 from django.db import models
+from django.db.models.query import QuerySet
 from django.contrib import admin
 
 from model_utils.fields import AutoCreatedField
@@ -8,7 +7,7 @@ from model_utils.fields import AutoCreatedField
 
 class Stock(object):
     """
-    An accumulation defined by a queryset. 
+    An accumulation defined by a queryset.
 
     In the abstract a stock is a collection that is counted at a specific time
     interval, generating a StockRecord). The state of an object defines it's
@@ -33,17 +32,27 @@ class Stock(object):
         self.name = name
         self.slug = slug
         self.queryset = queryset # defined but not executed at import time
-        self.facets = facets
+        self._facet_lookup = {}
+        for f in facets:
+            if isinstance(f, tuple):
+                facet, field_prefix = f
+            else:
+                facet = f
+                field_prefix = ""
+            self._facet_lookup[facet.slug] = (facet, field_prefix)
         self.inflows = []
         self.outflows = []
 
-
-    def __str__(self):
-        return "stock '%s'" % self.slug
+    @property
+    def facet_tuples(self):
+        return self._facet_lookup.values()
 
     @property
     def subject_model(self):
         return self.queryset.model
+
+    def __str__(self):
+        return "stock '%s'" % self.slug
 
     def register_inflow(self, flow):
         """
@@ -98,15 +107,30 @@ class Stock(object):
             rv[f] = f.all(source=self)
         return rv
 
+    def faceted_qs(self, facet_slug, value):
+        """
+        The queryset modified by applying a facet filter if it exists.
+        """
+        try:
+            facet, field_prefix = self._facet_lookup[facet_slug]
+            q_obj = facet.get_Q(value, field_prefix)
+            return self.queryset.filter(q_obj)
+        except KeyError:
+            return self.queryset
+
+    def get_facet(self, facet_slug):
+        try:
+            return self._facet_lookup[facet_slug][0]
+        except KeyError:
+            return None
+
     def save_count(self):
         """
         Save a record of the current count for the stock and any facets.
         """
         sr = StockRecord.objects.create(stock=self.slug, count=self.queryset.count())
-        for facet_item in self.facets:
-            if not isinstance(facet_item, tuple):
-                facet_item = (facet_item, "")
-            facet, field_prefix = facet_item
+        for facet_tuple in self.facet_tuples:
+            facet, field_prefix = facet_tuple
             for value, q in facet.to_count(field_prefix):
                 cnt = self.queryset.filter(q).count()
                 srf = StockFacetRecord.objects.create(stock_record=sr, facet=facet.slug,
@@ -134,6 +158,13 @@ class Facet(object):
             return self._given_values.iterator()
         return self._given_values
 
+    @property
+    def choices(self):
+        rv = ["", "Not selected"]
+        for v in self.values():
+            rv.append((v,v))
+        return rv
+
     def get_Q(self, value, field_prefix=""):
         """
         Return a Q object that can be used in a filter to isolate this facet.
@@ -158,7 +189,22 @@ class Facet(object):
         return ((v, self.get_Q(v, field_prefix)) for v in self.values)
 
 
-    
+class StockFacetQuerySet(QuerySet):
+    def __init__(self, stock=None, facet_slug="", facet_value="", *args, **kwargs):
+        self.stock = stock
+        if self.stock:
+            if facet_slug:
+                queryset = stock.faceted_qs(facet_slug, facet_value)
+                self.facet = stock.get_facet(facet_slug)
+            else:
+                queryset = stock.queryset
+                self.facet = None
+            super(StockFacetQuerySet, self).__init__(model=queryset.model, query=queryset.query,
+                                                     using=queryset._db, *args, **kwargs)
+        else:
+            super(StockFacetQuerySet, self).__init__(*args, **kwargs)
+
+
 class Flow(object):
     """
     A named relationship between stocks representing the transition of an
