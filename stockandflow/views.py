@@ -147,7 +147,7 @@ class StockSequencer(object):
     def previous(self, current_object_id=None, current_slug=None, slug_field=None):
         return self._step(-1, current_object_id, current_slug, slug_field)
 
-    def _step(self, step_amount, current_object_id=None, current_slug=None, slug_field=None):
+    def _step(self, step_amount, current_object_id, current_slug, slug_field):
         """
         Return the next or previous in the sequence based on the step_amount.
         If cur_object_id and slug are None then the previous object is index +
@@ -159,21 +159,21 @@ class StockSequencer(object):
 
         Raises StopIteration if the next index is invalid.
         """
-        if current_object_id is not None and current_object_id != self.object_at_index:
-            return self
+        if current_object_id is not None and current_object_id != self.object_at_index.id:
+            rv = self
         elif current_slug is not None:
             if slug_field is None:
                 raise ValueError("There must be a slug_field give if current_slug is given.")
             if current_slug != self.get_object()[slug_field]:
-                return self
+                rv = self
         else:
-            if self.index + step_amount < 0:
+            stepped_index = self.index + step_amount
+            if stepped_index < 0:
                 raise StopIteration
-            try:
-                return StockSequencer(self.stock_selection, self.facet_selection,
-                                      self.index + step_amount)
-            except IndexError:
-                raise StopIteration
+            rv = StockSequencer(self.stock_selection, self.facet_selection, stepped_index)
+        if not rv.object_at_index:
+            raise StopIteration
+        return rv
 
     def update_query_dict(self, query_dict):
         """
@@ -225,38 +225,14 @@ class Process(object):
         stock_seqs = []
         for stock in self.stock_lookup.values():
             stock_selection = StockSelection(self, stock=stock)
-            stock_seqs.append(StockSequencer(stock_selection, facet_selection))
+            try:
+                stock_seqs.append(StockSequencer(stock_selection, facet_selection))
+            except StopIteration:
+                pass
         return stock_seqs
 
-    def stock_object_detail(self, request, queryset=None, object_id=None, slug=None,
-        slug_field='slug', template_name=None, template_name_field=None,
-        template_loader=loader, extra_context=None,
-        context_processors=None, template_object_name='object',
-        mimetype=None):
-        """
-        This is a wrapper around the generic object detail.
-
-        It adds functionality to parse the get request query to determine the
-        stock sequence and place it into the template's context. Also if the
-        queryset is blank it will use the queryset from the stock with any
-        facets applied.
-        """
-        stock_sel = StockSelection(self, request)
-        facet_sel = FacetSelection(request)
-        stock_seq =  StockSequencer(request=request, stock_selection=stock_sel,
-                                    facet_selection=facet_sel)
-        if queryset is None:
-            queryset = stock_seq.stock_facet_qs
-        if extra_context is None:
-            extra_context = {}
-        extra_context["stock_seq"] = stock_seq
-        return object_detail(request, queryset, object_id, slug, slug_field,
-                             template_name, template_name_field, template_loader,
-                             extra_context, context_processors, template_object_name,
-                             mimetype)
-
     def next_in_stock(self, request, current_object_id=None, current_slug=None,
-                      slug_field=None, object_view=None, stop_iteration_view=None,
+                      slug_field="slug", object_view=None, stop_iteration_view=None,
                       reverse_args=None, reverse_kwargs=None, stock_seq=None, is_forward=True):
         """
         Either an object_id or a slug and slug_field are required. This is used
@@ -279,19 +255,20 @@ class Process(object):
         if reverse_kwargs is None:
             reverse_kwargs = {}
         view = object_view
+        query_str = None
         try:
             if is_forward:
-                next_stock_seq = stock_seq.next()
+                next_stock_seq = stock_seq.next(current_object_id, current_slug, slug_field)
             else:
-                next_stock_seq = stock_seq.previous()
+                next_stock_seq = stock_seq.previous(current_object_id, current_slug, slug_field)
+            query_str = next_stock_seq.update_query_dict(request.GET.copy()).urlencode()
+            if current_object_id:
+                reverse_kwargs["object_id"] = next_stock_seq.object_at_index.id
+            elif current_slug:
+                reverse_kwargs[slug_field] = next_stock_seq.object_at_index[slug_field]
         except StopIteration:
             view = stop_iteration_view
-        if current_object_id:
-            reverse_kwargs["object_id"] = next_stock_seq.object_at_index.id
-        elif current_slug:
-            reverse_kwargs[slug_field] = next_stock_seq.object_at_index[slug_field]
         url = reverse(view, args=reverse_args, kwargs=reverse_kwargs)
-        query_str = next_stock_seq.update_query_dict(request.GET.copy()).urlencode()
         if query_str:
             url += "?%s" % query_str
         return redirect(url)

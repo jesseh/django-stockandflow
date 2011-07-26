@@ -113,10 +113,13 @@ class Stock(object):
         """
         try:
             facet, field_prefix = self._facet_lookup[facet_slug]
-            q_obj = facet.get_Q(value, field_prefix)
-            return self.queryset.filter(q_obj)
         except KeyError:
             return self.queryset
+        if value in facet.values:
+            q_obj = facet.get_Q(value, field_prefix)
+            return self.queryset.filter(q_obj)
+        else:
+            raise ValueError("Invalid facet value")
 
     def get_facet(self, facet_slug):
         try:
