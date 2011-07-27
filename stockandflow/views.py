@@ -159,7 +159,12 @@ class StockSequencer(object):
 
         Raises StopIteration if the next index is invalid.
         """
-        if current_object_id is not None and current_object_id != self.object_at_index.id:
+        if not current_object_id:
+            self.index = 0
+            rv = self
+        elif not self.object_at_index:
+            raise StopIteration
+        elif current_object_id != self.object_at_index.id:
             rv = self
         elif current_slug is not None:
             if slug_field is None:
@@ -262,12 +267,13 @@ class Process(object):
             else:
                 next_stock_seq = stock_seq.previous(current_object_id, current_slug, slug_field)
             query_str = next_stock_seq.update_query_dict(request.GET.copy()).urlencode()
-            if current_object_id:
-                reverse_kwargs["object_id"] = next_stock_seq.object_at_index.id
-            elif current_slug:
+            if current_slug:
                 reverse_kwargs[slug_field] = next_stock_seq.object_at_index[slug_field]
+            else:
+                reverse_kwargs["object_id"] = next_stock_seq.object_at_index.id
         except StopIteration:
             view = stop_iteration_view
+            query_str = request.GET.urlencode()
         url = reverse(view, args=reverse_args, kwargs=reverse_kwargs)
         if query_str:
             url += "?%s" % query_str
