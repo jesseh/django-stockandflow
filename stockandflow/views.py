@@ -217,6 +217,7 @@ class Process(object):
         self.name = name
         self.stock_lookup = {}
         facet_set = set()
+        stocks.reverse()
         for stock in stocks:
             self.stock_lookup[stock.slug] = stock
             new_facets = []
