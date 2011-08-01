@@ -324,8 +324,6 @@ class StockRecordAdmin(admin.ModelAdmin):
     list_display=["timestamp", "stock", "count"]
     list_filter=["stock", "timestamp"]
 
-admin.site.register(StockRecord, StockRecordAdmin)
-
 
 class FlowEventModel(models.Model):
     """
@@ -350,3 +348,4 @@ class FlowEventModel(models.Model):
         return "%s (%s) at %s" % (self.flow, self.id, self.timestamp)
 
 
+#admin.site.register(StockRecord, StockRecordAdmin) # removed because it caused circular import error.
