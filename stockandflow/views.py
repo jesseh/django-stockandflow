@@ -131,7 +131,10 @@ class StockSequencer(object):
             self.index = index
         self.stock_selection = stock_selection
         self.facet_selection = facet_selection
-        self.stock_facet_qs = facet_selection.stock_facet_qs(self.stock_selection.stock)
+        if facet_selection:
+            self.stock_facet_qs = facet_selection.stock_facet_qs(self.stock_selection.stock)
+        else:
+            self.stock_facet_qs = StockFacetQuerySet(stock=self.stock_selection.stock)
         try:
             self.object_at_index = self.stock_facet_qs[self.index]
         except IndexError:

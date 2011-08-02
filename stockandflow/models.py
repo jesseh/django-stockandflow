@@ -115,6 +115,8 @@ class Stock(object):
             facet, field_prefix = self._facet_lookup[facet_slug]
         except KeyError:
             return self.queryset
+        if not facet_slug or not value:
+            return self.queryset
         if value in facet.values:
             q_obj = facet.get_Q(value, field_prefix)
             return self.queryset.filter(q_obj)
