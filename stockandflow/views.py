@@ -116,6 +116,10 @@ class StockSequencer(object):
     based.  The iterating depends on information that is placed in the query
     string of a GET request.
     """
+
+    #Movement constants
+    (NEXT, PREVIOUS, FIRST, LAST, TO_INDEX) = range(5)
+
     def __init__(self, stock_selection=None, facet_selection=None, index=None, request=None):
         """
         Values are extracted from the request.
@@ -149,6 +153,22 @@ class StockSequencer(object):
 
     def previous(self, current_object_id=None, current_slug=None, slug_field=None):
         return self._step(-1, current_object_id, current_slug, slug_field)
+
+    def first(self):
+        if self.count() == 0:
+            raise StopIteration
+        return StockSequencer(self.stock_selection, self.facet_selection, 0)
+
+    def last(self ):
+        if self.count() == 0:
+            raise StopIteration
+        return StockSequencer(self.stock_selection, self.facet_selection, self.count() - 1)
+
+    def to_index(self, to_index):
+        if self.count() == 0:
+            raise StopIteration
+        return StockSequencer(self.stock_selection, self.facet_selection, to_index)
+
 
     def _step(self, step_amount, current_object_id, current_slug, slug_field):
         """
@@ -215,6 +235,7 @@ class Process(object):
     """
     A helper class to group stocks for use in a view.
     """
+
     def __init__(self, slug, name, stocks):
         self.slug = slug
         self.name = name
@@ -242,7 +263,8 @@ class Process(object):
 
     def next_in_stock(self, request, current_object_id=None, current_slug=None,
                       slug_field="slug", object_view=None, stop_iteration_view=None,
-                      reverse_args=None, reverse_kwargs=None, stock_seq=None, is_forward=True):
+                      reverse_args=None, reverse_kwargs=None, stock_seq=None,
+                      movement=StockSequencer.NEXT, to_index=None):
         """
         Either an object_id or a slug and slug_field are required. This is used
         to check if the index needs to advance or not which happens if the
@@ -266,10 +288,16 @@ class Process(object):
         view = object_view
         query_str = None
         try:
-            if is_forward:
+            if movement == StockSequencer.NEXT:
                 next_stock_seq = stock_seq.next(current_object_id, current_slug, slug_field)
-            else:
+            elif movement == StockSequencer.PREVIOUS:
                 next_stock_seq = stock_seq.previous(current_object_id, current_slug, slug_field)
+            elif movement == StockSequencer.FIRST:
+                next_stock_seq = stock_seq.first()
+            elif movement == StockSequencer.LAST:
+                next_stock_seq = stock_seq.last()
+            elif movement == StockSequencer.TO_INDEX:
+                next_stock_seq = stock_seq.to_index(to_index)
             query_str = next_stock_seq.update_query_dict(request.GET.copy()).urlencode()
             if current_slug:
                 reverse_kwargs[slug_field] = next_stock_seq.object_at_index[slug_field]
