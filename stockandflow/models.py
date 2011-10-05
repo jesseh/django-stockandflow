@@ -28,11 +28,12 @@ class Stock(object):
     "profile__yada"=True.
     """
 
-    def __init__(self, slug, name, queryset, facets=[]):
+    def __init__(self, slug, name, queryset, facets=[], description=""):
         self.name = name
         self.slug = slug
         self.queryset = queryset # defined but not executed at import time
         self._facet_lookup = {}
+        self.description = description
         for f in facets:
             if isinstance(f, tuple):
                 facet, field_prefix = f
@@ -50,6 +51,13 @@ class Stock(object):
     @property
     def subject_model(self):
         return self.queryset.model
+
+    @property
+    def definition(self):
+        """
+        Extract the WHERE clause of a query string without the wrapping parens.
+        """
+        return str(self.queryset.query).split(" WHERE ")[1][1:-2]
 
     def __str__(self):
         return "stock '%s'" % self.slug
@@ -232,13 +240,14 @@ class Flow(object):
     would be to send an email each time an activating flow occurs.
     """
     def __init__(self, slug, name, flow_event_model, sources=[], sinks=[],
-                 event_callables=[]):
+                 event_callables=[], description=""):
         self.slug = slug
         self.name = name
         self.flow_event_model = flow_event_model
         self.sources = sources
         self.sinks = sinks
         self.event_callables = event_callables
+        self.description = description
         self.queryset = flow_event_model.objects.filter(flow=self.slug)
         # If a flow connects stocks they must track the same class
         stock_cls = None
@@ -266,6 +275,13 @@ class Flow(object):
     @property
     def subject_model(self):
         return self.flow_event_model.subject.field.related.parent_model
+
+    @property
+    def definition(self):
+        """
+        Extract the WHERE clause of a query string without the wrapping parens.
+        """
+        str(self.queryset.query).split(" WHERE ")[1][1:-2]
 
     def add_event(self, flowed_obj, source=None, sink=None):
         """
