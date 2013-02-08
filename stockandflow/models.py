@@ -55,9 +55,9 @@ class Stock(object):
     @property
     def definition(self):
         """
-        Extract the WHERE clause of a query string without the wrapping parens.
+        Extract the WHERE clause of a query string
         """
-        return str(self.queryset.query).split(" WHERE ")[1][1:-2]
+        return str(self.queryset.query).split(" WHERE ")[1]
 
     def __str__(self):
         return "stock '%s'" % self.slug
