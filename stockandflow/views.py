@@ -1,4 +1,5 @@
 from operator import attrgetter
+from collections import OrderedDict
 
 from django.shortcuts import redirect
 from django.views.generic.list_detail import object_detail
@@ -239,9 +240,9 @@ class Process(object):
     def __init__(self, slug, name, stocks):
         self.slug = slug
         self.name = name
+        self.stocks = stocks
         self.stock_lookup = {}
         facet_set = set()
-        stocks.reverse()
         for stock in stocks:
             self.stock_lookup[stock.slug] = stock
             new_facets = []
@@ -253,7 +254,7 @@ class Process(object):
     def all_stock_sequencers(self, facet_selection=None):
         # Get the facet select defined by the request.
         stock_seqs = []
-        for stock in self.stock_lookup.values():
+        for stock in self.stocks:
             stock_selection = StockSelection(self, stock=stock)
             try:
                 stock_seqs.append(StockSequencer(stock_selection, facet_selection))
